@@ -9,9 +9,10 @@
 #include <array>
 #include <vector>
 #include <iomanip>
+#include <map>
 
 #define ADDRESS_SIZE 32
-#define STRAIGHTEN_BITS 2
+#define STRAIGHTEN_BITS 0
 #define EFF_ADDRESS_SIZE ADDRESS_SIZE -STRAIGHTEN_BITS
 #define DATA_SIZE 32
 #define UNDEFINED -1
@@ -38,7 +39,7 @@ using namespace std;
 //-----------------------------------way--------------------------------------//
 
 class way {
-    unsigned *entry;
+    map<unsigned,unsigned> entry;
     const unsigned entries_num;
     const unsigned tag_size;
 public:
