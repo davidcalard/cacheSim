@@ -14,7 +14,7 @@
 #define ADDRESS_SIZE 32
 #define STRAIGHTEN_BITS 0
 #define EFF_ADDRESS_SIZE ADDRESS_SIZE -STRAIGHTEN_BITS
-#define DATA_SIZE 32
+#define DATA_SIZE 1
 #define UNDEFINED -1
 
 #define MISS false
@@ -40,11 +40,11 @@ using namespace std;
 
 class way {
     map<unsigned,unsigned> entry;
+    map<unsigned,bool> is_defined;
     const unsigned entries_num;
     const unsigned tag_size;
 public:
-    way(unsigned entries_num, unsigned block_size);
-    ~way();
+    way(unsigned set_size, unsigned block_size);
 
     void inline swap(unsigned address, unsigned set);
     bool check(unsigned address, unsigned set);
