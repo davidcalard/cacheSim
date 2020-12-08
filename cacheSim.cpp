@@ -25,14 +25,21 @@ way::way(const unsigned set_size, const unsigned block_size): entries_num(pow(2,
     }
 }
 
-void inline way::swap(unsigned address, unsigned set){
-    entry.find(set)->second = extract(address,tag_size,ADDRESS_SIZE-tag_size);//tag
+void way::swap(unsigned address, unsigned set, pair<unsigned,bool>& removed){
+    removed.first = entry.find(set)->second;
+    removed.second = is_defined.find(set)->second;
+    entry.find(set)->second = address;
     is_defined.find(set)->second = true;
 }
 
 bool way::check(unsigned address, unsigned set){
-    unsigned tag = extract(address,tag_size,ADDRESS_SIZE-tag_size);
-    return tag == entry.find(set)->second && is_defined.find(set)->second;
+    unsigned our_tag = extract(address,tag_size,ADDRESS_SIZE-tag_size);
+    unsigned curr_tag = extract(entry.find(set)->second,tag_size,ADDRESS_SIZE-tag_size);
+    return our_tag == curr_tag && is_defined.find(set)->second;
+}
+
+void inline way::undefineEntry(unsigned int set) {
+    is_defined.find(set)->second = false;
 }
 
 //----------------------------------level-------------------------------------//
@@ -62,37 +69,48 @@ int level::findWay(unsigned address, unsigned set) {
     return way_index;
 }
 
-void level::updateLRU(unsigned way_index, unsigned set) {
+void level::updateLRU(unsigned way_index, unsigned set, Mode mode) {
     int index = 0;
     for (auto iterator : LRU_table.at(set)) {
         if (iterator == way_index) break;
         index++;
     }
     LRU_table.at(set).erase(LRU_table.at(set).begin() + index);
-    LRU_table.at(set).emplace_back(way_index);
+    const auto iterator = mode == BACK ? LRU_table.at(set).end() : LRU_table.at(set).begin();
+    LRU_table.at(set).emplace(iterator,way_index);
 }
 
-bool level::accessLevel(unsigned address,bool is_wr) {
+bool level::accessLevel(unsigned address,bool is_write, pair<unsigned,bool>& removed ){
     unsigned set = extract(address, (size - b_size - assoc), STRAIGHTEN_BITS + b_size);
     int way_index = findWay(address, set);
+    removed.second = false;
     if (way_index == UNDEFINED) {
-        if (is_wr && !wr_alloc) return false;//NWA
+        if (is_write && !wr_alloc) return false;//NWA
         way_index = LRU_table.at(set).begin().operator*();
-        ways_vec.at(way_index).swap(address, set);
-        updateLRU(way_index, set);
+        ways_vec.at(way_index).swap(address, set, removed);
+        updateLRU(way_index, set, BACK);
         return false;
     } else {
-        updateLRU(way_index, set);
+        updateLRU(way_index, set, BACK);
         return true;
     }
 }
 
-bool level::read(unsigned address){
-    return accessLevel(address, false);
+void level::removeFromLevel(unsigned int address){
+    unsigned set = extract(address, (size - b_size - assoc), STRAIGHTEN_BITS + b_size);
+    int way_index = findWay(address, set);
+    if(way_index!=UNDEFINED) {
+        ways_vec.at(way_index).undefineEntry(set);
+        updateLRU(way_index, set, FRONT);
+    }
 }
 
-bool level::write(unsigned address){
-    return accessLevel(address, true);
+bool level::read(unsigned address, pair<unsigned,bool>& removed){
+    return accessLevel(address, false, removed);
+}
+
+bool level::write(unsigned address, pair<unsigned,bool>& removed){
+    return accessLevel(address, true, removed);
 }
 
 void inline level::incHit(){ hits_num++;}
@@ -102,6 +120,7 @@ void inline level::incMiss(){ misses_num++;}
 unsigned inline level::getStat(bool mode){
     return mode ? hits_num : misses_num;
 }
+
 
 //----------------------------------cache-------------------------------------//
 
@@ -113,36 +132,49 @@ cache::cache(unsigned init_param[9]):
 
 void cache::writeToCache(unsigned long int address){
     requests++;
-    if(l1.write(address)){//found and replaced in l1
+    pair<unsigned, bool> removed;
+    if(l1.write(address, removed)){//found and replaced in l1
         l1.incHit();
-        l2.write(address);//we use inclusion so found==true for sure and is replaced without inc l2.hit, we call here so l2.LRU is updated
+        l2.write(address, removed);//we use inclusion so found==true for sure and is replaced without inc l2.hit, we call here so l2.LRU is updated
         return;
     }
     //not found in l1
+    if(l2.wr_alloc && removed.second)
+        l2.write(removed.first,removed);//to update LRU (since there is inclusion here he is for sure already in l2)
     l1.incMiss();
-    if(l2.write(address)){//found and replaced in l2
+    if(l2.write(address, removed)){//found and replaced in l2
         l2.incHit();
         return;
     }
     //not found in cache
+    if(l2.wr_alloc && removed.second)
+        l1.removeFromLevel(removed.first);
     l2.incMiss();
-    requests++;
+    mem_requests++;
 }
 
 void cache::readFromCache(unsigned long int address)
 {
     requests++;
-    if (l1.read(address)) {//found in l1
+    pair<unsigned, bool> removed;
+    if (l1.read(address,removed)) {//found in l1
         l1.incHit();
+        if(removed.second){
+            l2.read(removed.first,removed);//to update LRU (since there is inclusion here he is for sure already in l2)
+        }
         return;
     }
     //miss in l1
+    if(removed.second)
+        l2.read(removed.first,removed);//to update LRU (since there is inclusion here he is for sure already in l2)
     l1.incMiss();
-    if (l2.read(address)) {//found in l2
+    if (l2.read(address,removed)) {//found in l2
         l2.incHit();
         return;
     }
     //miss in l2
+    if(removed.second)
+        l1.removeFromLevel(removed.first);
     l2.incMiss();
     mem_requests++;
 }
@@ -150,7 +182,7 @@ void cache::readFromCache(unsigned long int address)
 void cache::printStats(){
     double access_l1 = l1.getStat(MISS)+l1.getStat(HIT);
     double access_l2 = l2.getStat(MISS)+l2.getStat(HIT);
-    cout<<setprecision(3);
+    cout<<setprecision(3)<<fixed;
     cout<<"L1miss="<<((double)l1.getStat(MISS))/access_l1;
     cout<<" L2miss="<<((double)l2.getStat(MISS))/access_l2;
     cout<<" AccTimeAvg="<<(mem_requests*mem_cyc+access_l2*l2_cyc+access_l1*l1_cyc)/(double)requests;
