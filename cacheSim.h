@@ -1,21 +1,24 @@
 #ifndef HW2_CACHESIM_H
 #define HW2_CACHESIM_H
 
-#include <cstdlib>
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <math.h>
 #include <array>
-#include <vector>
+#include <assert.h>
+#include <cstdlib>
+#include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <map>
+#include <math.h>
+#include <sstream>
+#include <vector>
 
 #define ADDRESS_SIZE 32
 #define STRAIGHTEN_BITS 0
 #define EFF_ADDRESS_SIZE ADDRESS_SIZE -STRAIGHTEN_BITS
-#define DATA_SIZE 1
 #define UNDEFINED -1
+#define FRONT false
+#define BACK true
+
 
 #define MISS false
 #define HIT true
@@ -32,6 +35,8 @@
 
 using namespace std;
 
+typedef bool Mode;
+
 /*------------------------------------------------------------------------------
  *              cache class, subclasses and methods declaration
  -----------------------------------------------------------------------------*/
@@ -46,7 +51,8 @@ class way {
 public:
     way(unsigned set_size, unsigned block_size);
 
-    void inline swap(unsigned address, unsigned set);
+    void inline undefineEntry(unsigned set);
+    void swap(unsigned address, unsigned set, pair<unsigned,bool>& removed);
     bool check(unsigned address, unsigned set);
 
 };
@@ -66,16 +72,20 @@ public:
     level(unsigned b_s, unsigned s, unsigned a, unsigned w);
 
     int findWay(unsigned address, unsigned set);
-    void updateLRU(unsigned way_index, unsigned set);
-    bool accessLevel(unsigned address,bool is_wr);
+    void updateLRU(unsigned way_index, unsigned set, Mode mode);
+    bool accessLevel(unsigned address,bool is_write, pair<unsigned,bool>& removed);
+    void removeFromLevel(unsigned address);
 
-    bool read(unsigned address);
-    bool write(unsigned address);
+
+    bool read(unsigned address, pair<unsigned,bool>& removed);
+    bool write(unsigned address, pair<unsigned,bool>& removed);
 
     void incHit();
     void incMiss();
 
     unsigned inline getStat(bool mode);
+
+    friend class cache;
 };
 //-------------------------------cache----------------------------------------//
 
