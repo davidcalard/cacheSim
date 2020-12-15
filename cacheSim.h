@@ -19,6 +19,9 @@
 #define FRONT false
 #define BACK true
 
+#define ADDRESS 0
+#define DEFINED 1
+#define DIRTY 2
 
 #define MISS false
 #define HIT true
@@ -46,13 +49,14 @@ typedef bool Mode;
 class way {
     map<unsigned,unsigned> entry;
     map<unsigned,bool> is_defined;
+    map<unsigned,bool> is_dirty;
     const unsigned entries_num;
     const unsigned tag_size;
 public:
     way(unsigned set_size, unsigned block_size);
 
     void inline undefineEntry(unsigned set);
-    void swap(unsigned address, unsigned set, pair<unsigned,bool>& removed);
+    void swap(unsigned address, unsigned set, tuple<unsigned,bool,bool>& removed, bool is_write);
     bool check(unsigned address, unsigned set);
 
 };
@@ -73,12 +77,13 @@ public:
 
     int findWay(unsigned address, unsigned set);
     void updateLRU(unsigned way_index, unsigned set, Mode mode);
-    bool accessLevel(unsigned address,bool is_write, pair<unsigned,bool>& removed);
+    bool accessLevel(unsigned address,bool is_write, tuple<unsigned,bool,bool>& removed);
     void removeFromLevel(unsigned address);
+    bool checkHit(unsigned address);
 
 
-    bool read(unsigned address, pair<unsigned,bool>& removed);
-    bool write(unsigned address, pair<unsigned,bool>& removed);
+    bool read(unsigned address, tuple<unsigned,bool,bool>& removed);
+    bool write(unsigned address, tuple<unsigned,bool,bool>& removed);
 
     void incHit();
     void incMiss();
